@@ -442,20 +442,32 @@ async function loadCustomers(options = {}) {
 }
 
 async function loadLocations(options = {}) {
-  const { customerIds = null } = options;
+  const { customerIds = null, allCustomers = false } = options;
   const entityName = 'locations';
   console.log(`\n[Carga] Iniciando: ${entityName} (Sincronizando localidades de clientes)`);
 
-  const rateLimiter = new RateLimiter();
   const tracker = new ProgressTracker(entityName, 0);
 
   try {
     let targetCustomerIds = customerIds;
-    if (!targetCustomerIds || targetCustomerIds.length === 0) {
-      console.log(`[${entityName}] Buscando IDs de clientes cadastrados no BigQuery...`);
-      targetCustomerIds = await bqService.getAllCustomerIds();
+
+    // Se customerIds foi explicitamente passado como array (ex: do período) e está vazio:
+    if (Array.isArray(targetCustomerIds)) {
+      if (targetCustomerIds.length === 0 && !allCustomers) {
+        console.log(`[${entityName}] Nenhum cliente novo no período. Sincronização de localidades ignorada.`);
+        return { success: 0, errors: 0, duration: '0.0' };
+      }
+    } else if (!targetCustomerIds) {
+      if (allCustomers) {
+        console.log(`[${entityName}] Buscando IDs de clientes cadastrados no BigQuery...`);
+        targetCustomerIds = await bqService.getAllCustomerIds();
+      } else {
+        console.log(`[${entityName}] customerIds não fornecido. Sincronização de localidades ignorada.`);
+        return { success: 0, errors: 0, duration: '0.0' };
+      }
     }
 
+    const rateLimiter = new RateLimiter();
     tracker.totalItems = targetCustomerIds.length;
     tracker.unknownTotal = false;
     console.log(`[${entityName}] ${targetCustomerIds.length} clientes a processar para localidades.`);
@@ -547,7 +559,14 @@ async function loadOrderSubResources(options = {}) {
   try {
     let ordersToProcess = [];
 
-    if (orderIds && orderIds.length > 0) {
+    if (Array.isArray(orderIds)) {
+      if (orderIds.length === 0) {
+        console.log(`[Sub-recursos] Nenhuma ordem no período. Sincronização de comentários/anexos ignorada.`);
+        return {
+          comments: { success: 0, errors: 0, duration: '0.0' },
+          attachments: { success: 0, errors: 0, duration: '0.0' }
+        };
+      }
       console.log(`[Sub-recursos] Processando comentários/anexos para ${orderIds.length} ordens de serviço do período.`);
       ordersToProcess = orderIds.map(id => ({ id }));
     } else {
@@ -815,44 +834,54 @@ async function loadPeriod(options = {}) {
     // 1. Serviços (Catálogo completo de referência)
     console.log('\n[1/10] Sincronizando catálogo de Serviços...');
     results.services = await loadServices(periodOpts);
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 2. Colaboradores (Catálogo completo de referência)
     console.log('\n[2/10] Sincronizando catálogo de Colaboradores...');
     results.employees = await loadEmployees(periodOpts);
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 3. Clientes (Criados no período)
     console.log(`\n[3/10] Sincronizando Clientes (${period.description})...`);
     results.customers = await loadCustomers({ ...periodOpts, collectIds: true });
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 4. Localidades (Vinculadas aos clientes atualizados no período)
     console.log(`\n[4/10] Sincronizando Localidades dos Clientes (${period.description})...`);
     const recentCustomerIds = results.customers?.ids || [];
     results.locations = await loadLocations({ customerIds: recentCustomerIds, ...periodOpts });
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 5. Ordens de Serviço (Modificadas no período com Labels)
     console.log(`\n[5/10] Sincronizando Ordens de Serviço (${period.description})...`);
     results.orders = await loadOrders({ ...periodOpts, collectIds: true });
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 6. Sub-recursos de Ordens (Comentários e Anexos das OSs do período)
     console.log(`\n[6/10] Sincronizando Comentários e Anexos das OSs (${period.description})...`);
     const recentOrderIds = results.orders?.ids || [];
     results.subresources = await loadOrderSubResources({ orderIds: recentOrderIds, startDate: period.startDate, ...periodOpts });
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 7. Tarefas / Tasks (Modificadas no período)
     console.log(`\n[7/10] Sincronizando Tarefas (${period.description})...`);
     results.tasks = await loadTasks(periodOpts);
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 8. Formulários e Perguntas/Respostas (Respondidos no período)
     console.log(`\n[8/10] Sincronizando Formulários e Respostas (${period.description})...`);
     results.forms = await loadFormsAnswers(periodOpts);
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 9. Tickets / Chamados (Abertos no período)
     console.log(`\n[9/10] Sincronizando Tickets (${period.description})...`);
     results.tickets = await loadTickets(periodOpts);
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // 10. Avaliações / Ratings (Registradas no período)
     console.log(`\n[10/10] Sincronizando Avaliações (${period.description})...`);
     results.ratings = await loadRatings(periodOpts);
+    if (isStopped) return { status: 'cancelled', period: period.description, details: results };
 
     // Relatório Final
     const totalMin = ((Date.now() - startTime) / 60000).toFixed(1);
