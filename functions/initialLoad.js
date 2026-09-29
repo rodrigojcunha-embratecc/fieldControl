@@ -531,7 +531,7 @@ async function loadOrders(options = {}) {
   return await runEntityLoad('orders', '/orders', mappers.mapOrder, {
     longTimeout: true,
     paginated: true,
-    useDetailEndpoint: true,
+    useDetailEndpoint: false,
     enrichWithLabels: true,
     extraQueryParams,
     collectIds,
@@ -641,7 +641,7 @@ async function loadTasks(options = {}) {
   return await runEntityLoad('tasks', '/tasks', mappers.mapTask, {
     longTimeout: true,
     paginated: true,
-    useDetailEndpoint: true,
+    useDetailEndpoint: false,
     extraQueryParams,
     endDate,
     ...rest
@@ -764,7 +764,7 @@ async function loadTickets(options = {}) {
   return await runEntityLoad('tickets', '/tickets', mappers.mapTicket, {
     longTimeout: true,
     paginated: true,
-    useDetailEndpoint: true,
+    useDetailEndpoint: false,
     extraQueryParams,
     endDate,
     ...rest
