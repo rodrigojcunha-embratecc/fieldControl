@@ -27,10 +27,15 @@ app.use((req, res, next) => {
 
 // Middleware de autenticação de segurança para endpoints de sincronização e ingestão
 function authenticate(req, res, next) {
-  const authToken = process.env.API_AUTH_TOKEN;
+  const authToken = process.env.API_AUTH_TOKEN || process.env.LOAD_TOKEN;
   
   // Se nenhuma chave de segurança foi configurada no ambiente, permite a requisição
   if (!authToken) {
+    return next();
+  }
+
+  // Permite autenticação via query param ?token=...
+  if (req.query.token && req.query.token.trim() === authToken.trim()) {
     return next();
   }
 
@@ -38,7 +43,7 @@ function authenticate(req, res, next) {
   if (!authHeader) {
     return res.status(401).json({
       error: 'Unauthorized',
-      message: 'Token de autenticação obrigatório. Envie o cabeçalho Authorization: Bearer <token> ou x-api-key.'
+      message: 'Token de autenticação obrigatório. Envie o cabeçalho Authorization: Bearer <token>, x-api-key ou query param ?token=.'
     });
   }
 
