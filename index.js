@@ -25,17 +25,24 @@ app.use((req, res, next) => {
   next();
 });
 
+function sanitizeToken(token) {
+  if (!token || typeof token !== 'string') return '';
+  return token.replace(/^-n\s+/i, '').replace(/["'\r\n\s]/g, '').trim();
+}
+
 // Middleware de autenticação de segurança para endpoints de sincronização e ingestão
 function authenticate(req, res, next) {
-  const authToken = process.env.API_AUTH_TOKEN || process.env.LOAD_TOKEN;
+  const rawAuthToken = process.env.API_AUTH_TOKEN || process.env.LOAD_TOKEN;
   
   // Se nenhuma chave de segurança foi configurada no ambiente, permite a requisição
-  if (!authToken) {
+  if (!rawAuthToken) {
     return next();
   }
 
+  const expectedToken = sanitizeToken(rawAuthToken);
+
   // Permite autenticação via query param ?token=...
-  if (req.query.token && req.query.token.trim() === authToken.trim()) {
+  if (req.query.token && sanitizeToken(req.query.token) === expectedToken) {
     return next();
   }
 
@@ -47,8 +54,8 @@ function authenticate(req, res, next) {
     });
   }
 
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : authHeader.trim();
-  if (token !== authToken.trim()) {
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+  if (sanitizeToken(token) !== expectedToken) {
     return res.status(403).json({
       error: 'Forbidden',
       message: 'Token de autenticação inválido.'
