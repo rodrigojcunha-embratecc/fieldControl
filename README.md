@@ -182,3 +182,15 @@ docker build -t field-control-bi:latest .
 # Executar contêiner
 docker run -d -p 8080:8080 --env-file .env field-control-bi:latest
 ```
+
+---
+
+## ☁️ Implantação e Otimização de Custos (Google Cloud Run)
+
+O serviço está configurado para máxima eficiência e mínimo custo no Cloud Run (`southamerica-east1`):
+
+* **Dimensionamento**: `1 vCPU` / `1Gi` de memória (redução de 50% em relação a `2 vCPU / 2Gi`).
+* **Escala Automática**: `minScale: 0` e `maxScale: 5`. Quando não há tráfego ou webhooks, o custo de instâncias ociosas é **zero**.
+* **Startup CPU Boost**: Ativo para inicialização ultrarrápida (~1.5s) em cold starts.
+* **Upsert BigQuery**: `MERGE ... UNNEST` em lotes de 100 a 500 registros, eliminando tabelas intermediárias de staging e minimizando custos de varredura.
+
